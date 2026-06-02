@@ -120,6 +120,7 @@ canvas { max-height: 300px; }
       <div class="tab" data-tab="performers">Top / Bottom</div>
       <div class="tab" data-tab="uncategorized">Uncategorized</div>
       <div class="tab" data-tab="heatmap">Heatmaps</div>
+      <div class="tab" data-tab="compare">Compare</div>
     </div>
 
     <div class="tab-content" id="tab-alerts">
@@ -165,6 +166,33 @@ canvas { max-height: 300px; }
       <h2>Uncategorized URLs - Review for Taxonomy</h2>
       <p style="color:#888; font-size:11px; margin-bottom:10px;">URLs that didn't match any content group rule. Review to expand taxonomy.</p>
       <div class="table-wrapper" style="max-height:500px; overflow-y:auto;"><table id="uncatTable"></table></div>
+    </div>
+
+
+    <div class="tab-content" id="tab-compare">
+      <h2>Period Comparison</h2>
+      <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px; align-items:flex-end;">
+        <div>
+          <label style="font-size:11px; color:#888; text-transform:uppercase;">Period A (From)</label><br>
+          <input type="date" id="cmpAStart" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2a2d35; border-radius:6px; padding:6px 10px; font-size:12px;">
+          <input type="date" id="cmpAEnd" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2a2d35; border-radius:6px; padding:6px 10px; font-size:12px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:#888; text-transform:uppercase;">Period B (To)</label><br>
+          <input type="date" id="cmpBStart" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2a2d35; border-radius:6px; padding:6px 10px; font-size:12px;">
+          <input type="date" id="cmpBEnd" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2a2d35; border-radius:6px; padding:6px 10px; font-size:12px;">
+        </div>
+        <div>
+          <button id="cmpRun" style="background:#6366f1; color:#fff; border:none; border-radius:6px; padding:8px 16px; font-size:12px; cursor:pointer;">Compare</button>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="cmp-preset" data-preset="today-yesterday" style="background:#1a1d27; color:#888; border:1px solid #2a2d35; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer;">Today vs Yesterday</button>
+        <button class="cmp-preset" data-preset="yesterday-daybefore" style="background:#1a1d27; color:#888; border:1px solid #2a2d35; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer;">Yesterday vs Day Before</button>
+        <button class="cmp-preset" data-preset="thisweek-lastweek" style="background:#1a1d27; color:#888; border:1px solid #2a2d35; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer;">This Week vs Last Week</button>
+        <button class="cmp-preset" data-preset="last7-prev7" style="background:#1a1d27; color:#888; border:1px solid #2a2d35; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer;">Last 7d vs Prior 7d</button>
+      </div>
+      <div id="compareResults"></div>
     </div>
 
     <div class="tab-content" id="tab-heatmap">
@@ -577,6 +605,136 @@ function buildHeatmap(items, groupKey, containerId) {
   document.getElementById(containerId).innerHTML = html;
 }
 
+
+// ============ COMPARE ============
+function renderCompare() {
+  const aStart = document.getElementById('cmpAStart').value;
+  const aEnd = document.getElementById('cmpAEnd').value;
+  const bStart = document.getElementById('cmpBStart').value;
+  const bEnd = document.getElementById('cmpBEnd').value;
+  if (!aStart || !aEnd || !bStart || !bEnd) {
+    document.getElementById('compareResults').innerHTML = '<div style="color:#888; padding:20px; text-align:center;">Select two date ranges and click Compare.</div>';
+    return;
+  }
+  const aItems = allItems.filter(i => i.date >= aStart && i.date <= aEnd);
+  const bItems = allItems.filter(i => i.date >= bStart && i.date <= bEnd);
+  const aDays = new Set(aItems.map(i => i.date)).size || 1;
+  const bDays = new Set(bItems.map(i => i.date)).size || 1;
+
+  const aClicks = aItems.reduce((s,i) => s+i.clicks, 0);
+  const bClicks = bItems.reduce((s,i) => s+i.clicks, 0);
+  const aPages = new Set(aItems.map(i => i.path)).size;
+  const bPages = new Set(bItems.map(i => i.path)).size;
+
+  function pctChange(a, b) {
+    if (a === 0) return b > 0 ? '+new' : '-';
+    const pct = ((b - a) / a) * 100;
+    const sign = pct >= 0 ? '+' : '';
+    const color = pct >= 0 ? '#22c55e' : '#ef4444';
+    return `<span style="color:${color}; font-weight:600;">${sign}${pct.toFixed(1)}%</span>`;
+  }
+
+  function cmpCard(label, aVal, bVal) {
+    return `<div class="scorecard" style="min-width:140px;">
+      <div class="label">${label}</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:6px;">
+        <div><span style="color:#6366f1; font-size:11px;">A:</span> <strong style="color:#fff; font-size:16px;">${fmtNum(aVal)}</strong></div>
+        <div><span style="color:#22c55e; font-size:11px;">B:</span> <strong style="color:#fff; font-size:16px;">${fmtNum(bVal)}</strong></div>
+      </div>
+      <div style="text-align:right; margin-top:4px; font-size:12px;">${pctChange(aVal, bVal)}</div>
+    </div>`;
+  }
+
+  let html = `<div style="margin-bottom:10px; font-size:12px; color:#888;">
+    <span style="color:#6366f1;">Period A:</span> ${aStart} to ${aEnd} (${aDays}d) &nbsp;&nbsp;
+    <span style="color:#22c55e;">Period B:</span> ${bStart} to ${bEnd} (${bDays}d)
+  </div>`;
+
+  // Summary scorecards
+  html += '<div class="scorecards" style="margin-bottom:16px;">';
+  html += cmpCard('Total Aff. Clicks', aClicks, bClicks);
+  html += cmpCard('Avg Daily Clicks', Math.round(aClicks/aDays), Math.round(bClicks/bDays));
+  html += cmpCard('Unique Pages', aPages, bPages);
+  html += '</div>';
+
+  // By content group
+  html += '<h2>By Content Group</h2>';
+  const allCGs = [...new Set([...aItems, ...bItems].map(i => i.contentGroup))].sort();
+  html += '<div class="table-wrapper"><table><thead><tr><th>Content Group</th><th class="num">A Clicks</th><th class="num">A Avg/Day</th><th class="num">B Clicks</th><th class="num">B Avg/Day</th><th class="num">Change</th></tr></thead><tbody>';
+  for (const cg of allCGs) {
+    const ac = aItems.filter(i=>i.contentGroup===cg).reduce((s,i)=>s+i.clicks,0);
+    const bc = bItems.filter(i=>i.contentGroup===cg).reduce((s,i)=>s+i.clicks,0);
+    html += `<tr><td><span class="badge ${badgeClass(cg)}">${cg}</span></td><td class="num">${fmtNum(ac)}</td><td class="num">${Math.round(ac/aDays)}</td><td class="num">${fmtNum(bc)}</td><td class="num">${Math.round(bc/bDays)}</td><td class="num">${pctChange(ac,bc)}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  // By hostname group
+  html += '<h2>By Hostname Group</h2>';
+  const allHGs = [...new Set([...aItems, ...bItems].map(i => i.hostnameGroup))].sort();
+  html += '<div class="table-wrapper"><table><thead><tr><th>Hostname Group</th><th class="num">A Clicks</th><th class="num">A Avg/Day</th><th class="num">B Clicks</th><th class="num">B Avg/Day</th><th class="num">Change</th></tr></thead><tbody>';
+  for (const hg of allHGs) {
+    const ac = aItems.filter(i=>i.hostnameGroup===hg).reduce((s,i)=>s+i.clicks,0);
+    const bc = bItems.filter(i=>i.hostnameGroup===hg).reduce((s,i)=>s+i.clicks,0);
+    html += `<tr><td>${hg}</td><td class="num">${fmtNum(ac)}</td><td class="num">${Math.round(ac/aDays)}</td><td class="num">${fmtNum(bc)}</td><td class="num">${Math.round(bc/bDays)}</td><td class="num">${pctChange(ac,bc)}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  // Top movers (biggest absolute change by URL)
+  html += '<h2>Top Movers</h2>';
+  const urlA = {}, urlB = {};
+  for (const i of aItems) { urlA[i.path] = urlA[i.path] || {clicks:0,kw:i.keyword,cg:i.contentGroup,hg:i.hostnameGroup}; urlA[i.path].clicks += i.clicks; }
+  for (const i of bItems) { urlB[i.path] = urlB[i.path] || {clicks:0,kw:i.keyword,cg:i.contentGroup,hg:i.hostnameGroup}; urlB[i.path].clicks += i.clicks; }
+  const allPaths = [...new Set([...Object.keys(urlA), ...Object.keys(urlB)])];
+  const movers = allPaths.map(p => {
+    const a = urlA[p]?.clicks || 0, b = urlB[p]?.clicks || 0;
+    const info = urlA[p] || urlB[p];
+    return { path: p, kw: info.kw, cg: info.cg, hg: info.hg, a, b, delta: b - a, absDelta: Math.abs(b - a) };
+  }).sort((x,y) => y.absDelta - x.absDelta).slice(0, 20);
+  html += '<div class="table-wrapper" style="max-height:400px; overflow-y:auto;"><table><thead><tr><th>Keyword</th><th>Content</th><th>Host</th><th class="num">A</th><th class="num">B</th><th class="num">Delta</th></tr></thead><tbody>';
+  for (const m of movers) {
+    const color = m.delta >= 0 ? '#22c55e' : '#ef4444';
+    const sign = m.delta >= 0 ? '+' : '';
+    html += `<tr><td><span class="truncate" title="${m.kw}">${m.kw}</span></td><td><span class="badge ${badgeClass(m.cg)}">${m.cg}</span></td><td>${m.hg}</td><td class="num">${fmtNum(m.a)}</td><td class="num">${fmtNum(m.b)}</td><td class="num" style="color:${color};font-weight:600;">${sign}${fmtNum(m.delta)}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  document.getElementById('compareResults').innerHTML = html;
+}
+
+// Preset buttons
+function setupComparePresets() {
+  function toISO(d) { return d.toISOString().slice(0,10); }
+  function setDates(aS, aE, bS, bE) {
+    document.getElementById('cmpAStart').value = toISO(aS);
+    document.getElementById('cmpAEnd').value = toISO(aE);
+    document.getElementById('cmpBStart').value = toISO(bS);
+    document.getElementById('cmpBEnd').value = toISO(bE);
+  }
+  document.querySelectorAll('.cmp-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      const dayBefore = new Date(today); dayBefore.setDate(today.getDate() - 2);
+      const thisWeekStart = new Date(today); thisWeekStart.setDate(today.getDate() - today.getDay() + 1);
+      const lastWeekStart = new Date(thisWeekStart); lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+      const lastWeekEnd = new Date(thisWeekStart); lastWeekEnd.setDate(thisWeekStart.getDate() - 1);
+      const d7ago = new Date(today); d7ago.setDate(today.getDate() - 7);
+      const d14ago = new Date(today); d14ago.setDate(today.getDate() - 14);
+      const d8ago = new Date(today); d8ago.setDate(today.getDate() - 8);
+
+      switch(btn.dataset.preset) {
+        case 'today-yesterday': setDates(yesterday, yesterday, today, today); break;
+        case 'yesterday-daybefore': setDates(dayBefore, dayBefore, yesterday, yesterday); break;
+        case 'thisweek-lastweek': setDates(lastWeekStart, lastWeekEnd, thisWeekStart, today); break;
+        case 'last7-prev7': setDates(d14ago, d8ago, d7ago, yesterday); break;
+      }
+      renderCompare();
+    });
+  });
+  document.getElementById('cmpRun').addEventListener('click', renderCompare);
+}
+
 // ============ TABS ============
 document.getElementById('mainTabs').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
@@ -586,6 +744,7 @@ document.getElementById('mainTabs').addEventListener('click', e => {
   tab.classList.add('active');
   document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
   if (tab.dataset.tab === 'trends') renderTrends(allItems, document.getElementById('filterContent').value, document.getElementById('filterHost').value);
+  if (tab.dataset.tab === 'compare' && !document.getElementById('cmpAStart').value) renderCompare();
 });
 
 // ============ DATE RANGE BUTTONS ============
@@ -641,6 +800,8 @@ async function loadDashboard(days) {
     renderUncategorized(allItems);
     buildHeatmap(allItems, 'contentGroup', 'heatmapContent');
     buildHeatmap(allItems, 'hostnameGroup', 'heatmapHost');
+    setupComparePresets();
+    renderCompare();
 
   } catch (err) {
     const el = document.getElementById('loading');
