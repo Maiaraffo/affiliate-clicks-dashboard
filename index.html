@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Affiliate Click Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root { color-scheme: dark; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; font-size: 13px; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+h2 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: #c0c0c0; border-bottom: 1px solid #2a2d35; padding-bottom: 6px; }
+.subtitle { color: #888; font-size: 12px; margin-bottom: 12px; }
+.loading { text-align: center; padding: 40px 20px; color: #888; }
+.loading .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid #333; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.debug { background: #1a1d27; border: 1px solid #2a2d35; border-radius: 8px; padding: 12px; margin: 12px 0; font-family: monospace; font-size: 11px; color: #aaa; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+.status-msg { font-size: 11px; color: #666; margin-top: 4px; }
+
+.alerts-container { margin-bottom: 16px; }
+.alert { padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; font-size: 12px; line-height: 1.5; }
+.alert-danger { background: #2d1215; border: 1px solid #dc2626; color: #fca5a5; }
+.alert-warning { background: #2d2412; border: 1px solid #d97706; color: #fcd34d; }
+.alert-success { background: #122d15; border: 1px solid #16a34a; color: #86efac; }
+.alert-info { background: #121d2d; border: 1px solid #2563eb; color: #93c5fd; }
+.alert strong { font-weight: 700; }
+
+.scorecards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.scorecard { background: #1a1d27; border-radius: 10px; padding: 14px; border: 1px solid #2a2d35; }
+.scorecard .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.scorecard .value { font-size: 22px; font-weight: 700; color: #fff; margin-top: 4px; }
+.scorecard .sublabel { font-size: 10px; color: #666; margin-top: 2px; }
+
+.top-bar { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.top-bar-left { flex: 1; }
+.date-range-bar { display: flex; gap: 6px; align-items: center; }
+.date-range-bar .dr-btn { background: #1a1d27; color: #888; border: 1px solid #2a2d35; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.date-range-bar .dr-btn:hover { border-color: #6366f1; color: #c0c0c0; }
+.date-range-bar .dr-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+.date-range-bar .dr-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.date-range-bar label { font-size: 10px; color: #666; text-transform: uppercase; margin-right: 4px; }
+
+.filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.filters label { font-size: 11px; color: #888; text-transform: uppercase; }
+.filters select { background: #1a1d27; color: #e0e0e0; border: 1px solid #2a2d35; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.filters select:focus { outline: none; border-color: #6366f1; }
+
+.table-wrapper { overflow-x: auto; margin-bottom: 16px; border-radius: 8px; border: 1px solid #2a2d35; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { background: #1a1d27; color: #888; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; }
+thead th:hover { color: #c0c0c0; }
+thead th.sort-asc::after { content: ' ▲'; color: #6366f1; }
+thead th.sort-desc::after { content: ' ▼'; color: #6366f1; }
+tbody td { padding: 8px 12px; border-top: 1px solid #1e2028; }
+tbody tr:hover { background: #1a1d27; }
+tbody tr:nth-child(even) { background: #13151c; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.badge-slots { background: #3b1d6e; color: #c4b5fd; }
+.badge-casino { background: #1e3a2f; color: #86efac; }
+.badge-top { background: #3b2f1d; color: #fcd34d; }
+.badge-nodeposit { background: #1d2e3b; color: #93c5fd; }
+.badge-state { background: #3b1d2f; color: #f9a8d4; }
+.badge-picks { background: #2f3b1d; color: #bef264; }
+.badge-sportsbook { background: #1d3b35; color: #5eead4; }
+.badge-freespins { background: #3b351d; color: #fde68a; }
+.badge-welcome { background: #1d253b; color: #a5b4fc; }
+.badge-uncat { background: #2a2a2a; color: #aaa; }
+
+.chart-container { background: #1a1d27; border-radius: 10px; padding: 14px; border: 1px solid #2a2d35; margin-bottom: 16px; }
+canvas { max-height: 300px; }
+
+.heatmap { display: grid; gap: 2px; margin-bottom: 16px; }
+.heatmap-cell { padding: 6px 4px; text-align: center; font-size: 10px; border-radius: 4px; min-height: 36px; display: flex; flex-direction: column; justify-content: center; }
+.heatmap-header { font-weight: 600; color: #888; font-size: 10px; background: transparent !important; }
+
+.tabs { display: flex; gap: 0; margin-bottom: 14px; border-bottom: 1px solid #2a2d35; overflow-x: auto; }
+.tab { padding: 8px 16px; font-size: 12px; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; }
+.tab:hover { color: #c0c0c0; }
+.tab.active { color: #6366f1; border-bottom-color: #6366f1; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.truncate { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div id="loadingMsg">Pulling live GA4 data...</div>
+    <div style="color:#555; margin-top:8px; font-size:11px;">Property: 1GNT - GA4 - Rollup (406717704)</div>
+    <div id="loadingStatus"></div>
+  </div>
+  <div id="dashboard" style="display:none;">
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <h1>Affiliate Click Dashboard</h1>
+        <p class="subtitle">1GNT - GA4 - Rollup | Event: affiliate_click | <span id="dateRange"></span></p>
+      </div>
+      <div>
+        <div class="date-range-bar" id="dateRangeBar">
+          <label>Range:</label>
+          <button class="dr-btn" data-days="7">7d</button>
+          <button class="dr-btn" data-days="14">14d</button>
+          <button class="dr-btn active" data-days="30">30d</button>
+          <button class="dr-btn" data-days="60">60d</button>
+          <button class="dr-btn" data-days="90">90d</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scorecards" id="scorecards"></div>
+
+    <div class="tabs" id="mainTabs">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="alerts">Alerts <span id="alertBadge" style="display:none; background:#dc2626; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; margin-left:4px; vertical-align:middle;"></span></div>
+      <div class="tab" data-tab="trends">Trends</div>
+      <div class="tab" data-tab="performers">Top / Bottom</div>
+      <div class="tab" data-tab="uncategorized">Uncategorized</div>
+      <div class="tab" data-tab="heatmap">Heatmaps</div>
+    </div>
+
+    <div class="tab-content" id="tab-alerts">
+      <h2>Drop Alerts</h2>
+      <p style="color:#888; font-size:11px; margin-bottom:10px;">Content groups or hostnames with 20%+ daily avg affiliate click decline (first half vs second half of selected range).</p>
+      <div id="alertsDrops"></div>
+      <h2>Growth Signals</h2>
+      <p style="color:#888; font-size:11px; margin-bottom:10px;">Content groups or hostnames with 20%+ daily avg affiliate click growth.</p>
+      <div id="alertsGrowth"></div>
+      <h2>Breakout Pages</h2>
+      <p style="color:#888; font-size:11px; margin-bottom:10px;">Individual URLs that appeared or surged in affiliate clicks in the second half of the period.</p>
+      <div id="alertsBreakout"></div>
+    </div>
+
+    <div class="tab-content active" id="tab-overview">
+      <h2>Affiliate Clicks by Hostname Group</h2>
+      <div class="table-wrapper"><table id="hostTable"></table></div>
+      <h2>Sessions by Hostname Group</h2>
+      <div class="table-wrapper"><table id="hostSessionTable"></table></div>
+      <h2>Affiliate Clicks by Content Group</h2>
+      <div class="table-wrapper"><table id="contentTable"></table></div>
+    </div>
+
+    <div class="tab-content" id="tab-trends">
+      <h2>Daily Affiliate Clicks Trend</h2>
+      <div class="filters">
+        <div><label>Content Group</label><br><select id="filterContent"><option value="all">All</option></select></div>
+        <div><label>Hostname Group</label><br><select id="filterHost"><option value="all">All</option></select></div>
+      </div>
+      <div class="chart-container"><canvas id="trendChart"></canvas></div>
+      <h2>Daily Sessions Trend</h2>
+      <div class="chart-container"><canvas id="sessionChart"></canvas></div>
+    </div>
+
+    <div class="tab-content" id="tab-performers">
+      <h2>Top Performers (by total aff. clicks)</h2>
+      <div class="table-wrapper" style="max-height:400px; overflow-y:auto;"><table id="topTable"></table></div>
+      <h2>Bottom Performers (lowest aff. clicks)</h2>
+      <div class="table-wrapper" style="max-height:400px; overflow-y:auto;"><table id="bottomTable"></table></div>
+    </div>
+
+    <div class="tab-content" id="tab-uncategorized">
+      <h2>Uncategorized URLs - Review for Taxonomy</h2>
+      <p style="color:#888; font-size:11px; margin-bottom:10px;">URLs that didn't match any content group rule. Review to expand taxonomy.</p>
+      <div class="table-wrapper" style="max-height:500px; overflow-y:auto;"><table id="uncatTable"></table></div>
+    </div>
+
+    <div class="tab-content" id="tab-heatmap">
+      <h2>Affiliate Clicks Heatmap: Content Group</h2>
+      <div id="heatmapContent"></div>
+      <h2>Affiliate Clicks Heatmap: Hostname Group</h2>
+      <div id="heatmapHost"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// PASTE YOUR APPS SCRIPT WEB APP URL HERE:
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxV4HaEUMyGgv7lbus2k_mNuTJQpugqFOoRjoabHojxBNlNY7O6oVnVw5V4Vknq_zdlQ/exec';
+// =====================================================
+let currentDays = 30;
+
+// ============ CLASSIFICATION ============
+const US_STATES = new Set(["alabama","alaska","arizona","arkansas","california","colorado","connecticut","delaware","florida","georgia","hawaii","idaho","illinois","indiana","iowa","kansas","kentucky","louisiana","maine","maryland","massachusetts","michigan","minnesota","mississippi","missouri","montana","nebraska","nevada","new hampshire","new jersey","new mexico","new york","north carolina","north dakota","ohio","oklahoma","oregon","pennsylvania","rhode island","south carolina","south dakota","tennessee","texas","utah","vermont","virginia","washington","west virginia","wisconsin","wyoming","ontario","canada","nj","pa","ny","mi","oh","il","co","az","va","ct","wv","md","la","ia","ky","nc","ma","in","tn"]);
+const MONTHS = new Set(["january","february","march","april","may","june","july","august","september","october","november","december","jan","feb","mar","apr","jun","jul","aug","sep","oct","nov","dec"]);
+const FILLER = new Set(["rankings","ranked","ranking","online","best","review","reviews","guide","top","the","a","an","and","or","for","in","of","to","with","at","by","on","is","it","this","that","our","your","2024","2025","2026","2027"]);
+
+function extractKeyword(path) {
+  let slug = path.replace(/\/$/, '').replace(/\/\d{8,}$/, '');
+  slug = (slug.split('/').pop() || slug).replace(/-/g, ' ');
+  for (const m of MONTHS) slug = slug.replace(new RegExp('\\b' + m + '\\s*\\d{4}\\b', 'gi'), '');
+  slug = slug.replace(/\b20\d{2}\b/g, '');
+  const words = slug.split(/\s+/), cleaned = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i].toLowerCase().trim();
+    if (!w) continue;
+    if (w === 'top' && i + 1 < words.length && /^\d+$/.test(words[i+1])) { cleaned.push(words[i]); continue; }
+    if (FILLER.has(w)) continue;
+    cleaned.push(words[i]);
+  }
+  return cleaned.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function classifyContent(kw) {
+  const kl = kw.toLowerCase();
+  if (/top\s+\d+/.test(kl)) return 'Top x Rankings';
+  if (kl.includes('no deposit')) return 'No Deposit Bonus';
+  if (kl.includes('welcome bonus') || kl.includes('sign up bonus') || kl.includes('signup bonus')) return 'Welcome Bonus';
+  if (kl.includes('free spin')) return 'Free Spins';
+  if (kl.includes('slot')) return 'Slots';
+  if (kl.includes('sportsbook') || kl.includes('sports betting') || kl.includes('betting site')) return 'Sportsbook';
+  for (const s of US_STATES) { if (kl.split(/\s+/).includes(s) || (s.length > 2 && kl.includes(s))) return 'State-Specific'; }
+  if (kl.includes('pick') || kl.includes('prediction') || kl.includes('best bet')) return 'Picks';
+  if (kl.includes('casino')) return 'Casino - General';
+  return 'Uncategorized';
+}
+
+function classifyHost(h) {
+  const hl = h.toLowerCase();
+  if (hl === 'ftw.usatoday.com') return 'FTW';
+  if (hl.includes('thelistwire')) return 'Wire/Listicle';
+  if (hl.includes('wire')) return 'Team Wire';
+  if (hl === 'www.usatoday.com') return 'USA Today Main';
+  if (hl.includes('golfweek')) return 'Golfweek';
+  return 'Local/Gannett';
+}
+
+function badgeClass(cg) {
+  const map = {'Slots':'slots','Casino - General':'casino','Top x Rankings':'top','No Deposit Bonus':'nodeposit','State-Specific':'state','Picks':'picks','Sportsbook':'sportsbook','Free Spins':'freespins','Welcome Bonus':'welcome','Uncategorized':'uncat'};
+  return 'badge-' + (map[cg] || 'uncat');
+}
+
+function fmtDate(d) { return d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6); }
+function fmtNum(n) { return n.toLocaleString(); }
+
+// ============ DATA FETCHING — from Apps Script ============
+function setStatus(msg) {
+  const el = document.getElementById('loadingStatus');
+  if (el) el.innerHTML += `<div class="status-msg">${msg}</div>`;
+}
+
+async function fetchData(days) {
+  if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    throw new Error('Apps Script URL not configured. Open index.html and set APPS_SCRIPT_URL.');
+  }
+  setStatus('Fetching data from Apps Script...');
+  const url = APPS_SCRIPT_URL + '?days=' + days;
+  const resp = await fetch(url, { redirect: 'follow' });
+  if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+  const json = await resp.json();
+  if (!json.ok) throw new Error('API error: ' + (json.error || 'unknown'));
+  setStatus('Data received: ' + json.data.clicks.length + ' click rows, ' + json.data.sessions.length + ' session rows.');
+  return json.data;
+}
+
+function processData(raw) {
+  // raw.clicks = [{d, p, h, c}, ...], raw.sessions = [{d, h, s}, ...]
+  const sessMap = {};
+  for (const r of (raw.sessions || [])) {
+    const hg = classifyHost(r.h);
+    const key = r.d + '|' + hg;
+    sessMap[key] = (sessMap[key] || 0) + r.s;
+  }
+
+  const items = [];
+  for (const r of (raw.clicks || [])) {
+    const date = fmtDate(r.d);
+    const keyword = extractKeyword(r.p);
+    const hostnameGroup = classifyHost(r.h);
+    items.push({ date, dateRaw: r.d, path: r.p, host: r.h, hostnameGroup, keyword, contentGroup: classifyContent(keyword), clicks: r.c });
+  }
+
+  const dailyHostSess = {};
+  for (const [key, val] of Object.entries(sessMap)) {
+    const dateRaw = key.split('|')[0];
+    const hg = key.split('|').slice(1).join('|');
+    dailyHostSess[fmtDate(dateRaw) + '|' + hg] = val;
+  }
+
+  return { items, dailyHostSess };
+}
+
+// ============ ALERTS ============
+function generateAlerts(items) {
+  const dates = [...new Set(items.map(i => i.date))].sort();
+  if (dates.length < 8) return { drops: [], growth: [], breakout: [] };
+  const mid = Math.floor(dates.length / 2);
+  const recentDates = new Set(dates.slice(mid)), priorDates = new Set(dates.slice(0, mid));
+  const rDays = recentDates.size, pDays = priorDates.size;
+  const drops = [], growth = [], breakout = [];
+  const periodLabel = `first ${pDays}d vs last ${rDays}d`;
+
+  // Helper: find top driver of change in a group
+  function findDriver(items, groupKey, groupVal, recentDates, priorDates, direction) {
+    const urlClicks = {};
+    for (const i of items) {
+      if (i[groupKey] === groupVal) {
+        if (!urlClicks[i.path]) urlClicks[i.path] = { recent: 0, prior: 0, kw: i.keyword, path: i.path };
+        if (recentDates.has(i.date)) urlClicks[i.path].recent += i.clicks;
+        else if (priorDates.has(i.date)) urlClicks[i.path].prior += i.clicks;
+      }
+    }
+    let best = null, bestAmt = 0;
+    for (const d of Object.values(urlClicks)) {
+      const delta = direction === 'drop' ? (d.prior - d.recent) : (d.recent - d.prior);
+      if (delta > bestAmt) { bestAmt = delta; best = d; }
+    }
+    return best;
+  }
+
+  // Content group alerts (drops + growth)
+  const cgR = {}, cgP = {};
+  for (const i of items) {
+    if (recentDates.has(i.date)) cgR[i.contentGroup] = (cgR[i.contentGroup] || 0) + i.clicks;
+    else if (priorDates.has(i.date)) cgP[i.contentGroup] = (cgP[i.contentGroup] || 0) + i.clicks;
+  }
+  for (const cg of Object.keys({...cgR, ...cgP})) {
+    const r = (cgR[cg] || 0) / rDays, p = (cgP[cg] || 0) / pDays;
+    if (p > 5) {
+      const pct = ((r - p) / p) * 100;
+      if (pct <= -20) {
+        const driver = findDriver(items, 'contentGroup', cg, recentDates, priorDates, 'drop');
+        let msg = `Maia, <strong>${cg}</strong> aff. clicks down <strong>${Math.abs(pct).toFixed(0)}%</strong> (${p.toFixed(0)}/day &rarr; ${r.toFixed(0)}/day, ${periodLabel}).`;
+        if (driver) msg += ` Main driver: <strong>${driver.kw}</strong> (${driver.prior} &rarr; ${driver.recent}).`;
+        drops.push({ type: 'danger', msg, pct });
+      } else if (pct >= 20) {
+        const driver = findDriver(items, 'contentGroup', cg, recentDates, priorDates, 'growth');
+        let msg = `Maia, <strong>${cg}</strong> aff. clicks up <strong>+${pct.toFixed(0)}%</strong> (${p.toFixed(0)}/day &rarr; ${r.toFixed(0)}/day, ${periodLabel}).`;
+        if (driver) msg += ` Top contributor: <strong>${driver.kw}</strong> (${driver.prior} &rarr; ${driver.recent}).`;
+        growth.push({ type: 'success', msg, pct });
+      }
+    } else if (p <= 5 && (cgR[cg] || 0) / rDays > 10) {
+      // New/emerging content group
+      growth.push({ type: 'success', msg: `Maia, <strong>${cg}</strong> is emerging — was ~${p.toFixed(0)}/day, now <strong>${((cgR[cg]||0)/rDays).toFixed(0)}/day</strong> (${periodLabel}).`, pct: 999 });
+    }
+  }
+
+  // Hostname group alerts (drops + growth)
+  const hgR = {}, hgP = {};
+  for (const i of items) {
+    if (recentDates.has(i.date)) hgR[i.hostnameGroup] = (hgR[i.hostnameGroup] || 0) + i.clicks;
+    else if (priorDates.has(i.date)) hgP[i.hostnameGroup] = (hgP[i.hostnameGroup] || 0) + i.clicks;
+  }
+  for (const hg of Object.keys({...hgR, ...hgP})) {
+    const r = (hgR[hg] || 0) / rDays, p = (hgP[hg] || 0) / pDays;
+    if (p > 5) {
+      const pct = ((r - p) / p) * 100;
+      if (pct <= -20) {
+        drops.push({ type: 'danger', msg: `Maia, <strong>${hg}</strong> hostname aff. clicks down <strong>${Math.abs(pct).toFixed(0)}%</strong> (${p.toFixed(0)}/day &rarr; ${r.toFixed(0)}/day, ${periodLabel}).`, pct });
+      } else if (pct >= 20) {
+        growth.push({ type: 'success', msg: `Maia, <strong>${hg}</strong> hostname aff. clicks up <strong>+${pct.toFixed(0)}%</strong> (${p.toFixed(0)}/day &rarr; ${r.toFixed(0)}/day, ${periodLabel}).`, pct });
+      }
+    }
+  }
+
+  // Breakout pages: URLs that had 0 clicks in prior half but 10+ in recent half, or 5x+ surge
+  const urlR = {}, urlP = {};
+  for (const i of items) {
+    if (recentDates.has(i.date)) { urlR[i.path] = urlR[i.path] || { clicks: 0, kw: i.keyword, host: i.hostnameGroup, cg: i.contentGroup }; urlR[i.path].clicks += i.clicks; }
+    else if (priorDates.has(i.date)) { urlP[i.path] = urlP[i.path] || { clicks: 0 }; urlP[i.path].clicks += i.clicks; }
+  }
+  for (const [path, rd] of Object.entries(urlR)) {
+    const prior = urlP[path]?.clicks || 0;
+    const recent = rd.clicks;
+    if (prior === 0 && recent >= 15) {
+      breakout.push({ type: 'info', msg: `New page: <strong>${rd.kw}</strong> appeared with <strong>${recent}</strong> clicks (${rd.cg} / ${rd.host}).`, clicks: recent });
+    } else if (prior > 0 && recent / prior >= 3 && recent >= 20) {
+      breakout.push({ type: 'info', msg: `Surge: <strong>${rd.kw}</strong> went from ${prior} &rarr; <strong>${recent}</strong> clicks (${Math.round(recent/prior)}x, ${rd.cg} / ${rd.host}).`, clicks: recent });
+    }
+  }
+
+  // Sort by severity
+  drops.sort((a, b) => a.pct - b.pct);
+  growth.sort((a, b) => b.pct - a.pct);
+  breakout.sort((a, b) => b.clicks - a.clicks);
+
+  return { drops, growth, breakout: breakout.slice(0, 15) };
+}
+
+// ============ RENDERING ============
+let trendChart = null, sessionChart = null, allItems = [], allSessions = {};
+
+function renderScorecards(items) {
+  const totalClicks = items.reduce((s, i) => s + i.clicks, 0);
+  const uniquePages = new Set(items.map(i => i.path)).size;
+  const dates = [...new Set(items.map(i => i.date))].sort();
+  const n = dates.length;
+  const avgDaily = n ? Math.round(totalClicks / n) : 0;
+  // Total sessions from the aggregated data
+  let totalSess = 0;
+  for (const v of Object.values(allSessions)) totalSess += v;
+  const avgSessDaily = n ? Math.round(totalSess / n) : 0;
+
+  document.getElementById('dateRange').textContent = n ? `${dates[0]} to ${dates[n-1]} (${n} days)` : 'No data';
+  document.getElementById('scorecards').innerHTML = [
+    { label: 'Total Affiliate Clicks', value: fmtNum(totalClicks), sub: `${n}-day total` },
+    { label: 'Avg Daily Aff. Clicks', value: fmtNum(avgDaily), sub: `total / ${n} days` },
+    { label: 'Total Sessions', value: fmtNum(totalSess), sub: `all hosts, ${n}-day total` },
+    { label: 'Avg Daily Sessions', value: fmtNum(avgSessDaily), sub: `total / ${n} days` },
+    { label: 'Unique Pages', value: fmtNum(uniquePages), sub: 'with aff. clicks' },
+  ].map(c => `<div class="scorecard"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sublabel">${c.sub}</div></div>`).join('');
+}
+
+function renderAlerts(items) {
+  const { drops, growth, breakout } = generateAlerts(items);
+
+  // Drops section
+  const dropsEl = document.getElementById('alertsDrops');
+  if (!drops.length) dropsEl.innerHTML = '<div class="alert alert-success">No 20%+ drops detected.</div>';
+  else dropsEl.innerHTML = drops.map(a => `<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
+
+  // Growth section
+  const growthEl = document.getElementById('alertsGrowth');
+  if (!growth.length) growthEl.innerHTML = '<div class="alert alert-info" style="color:#888;">No 20%+ growth signals in this period.</div>';
+  else growthEl.innerHTML = growth.map(a => `<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
+
+  // Breakout section
+  const breakoutEl = document.getElementById('alertsBreakout');
+  if (!breakout.length) breakoutEl.innerHTML = '<div class="alert alert-info" style="color:#888;">No breakout pages detected.</div>';
+  else breakoutEl.innerHTML = breakout.map(a => `<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
+
+  // Badge on tab
+  const badge = document.getElementById('alertBadge');
+  const totalAlerts = drops.length + growth.length + breakout.length;
+  if (totalAlerts > 0) {
+    badge.style.display = 'inline';
+    badge.textContent = totalAlerts;
+    if (drops.length > 0) badge.style.background = '#dc2626';
+    else badge.style.background = '#16a34a';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function makeSortableTable(tableEl, headers, rows, defaultSort, defaultDir) {
+  let sortCol = defaultSort || 0, sortDir = defaultDir || 'desc';
+  function render() {
+    const sorted = [...rows].sort((a, b) => {
+      let va = a[sortCol], vb = b[sortCol];
+      if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
+      va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+      return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+    tableEl.innerHTML = `<thead><tr>${headers.map((h, i) =>
+      `<th class="${i === sortCol ? 'sort-' + sortDir : ''}" data-col="${i}">${h.label}</th>`
+    ).join('')}</tr></thead><tbody>${sorted.map(row =>
+      `<tr>${row.map((cell, i) => `<td class="${headers[i].cls || ''}">${cell}</td>`).join('')}</tr>`
+    ).join('')}</tbody>`;
+    tableEl.querySelectorAll('th').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = parseInt(th.dataset.col);
+        if (col === sortCol) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        else { sortCol = col; sortDir = 'desc'; }
+        render();
+      });
+    });
+  }
+  render();
+}
+
+function renderOverview(items) {
+  const hg = {}, cg = {};
+  for (const i of items) {
+    if (!hg[i.hostnameGroup]) hg[i.hostnameGroup] = { clicks: 0, pages: new Set() };
+    hg[i.hostnameGroup].clicks += i.clicks; hg[i.hostnameGroup].pages.add(i.path);
+    if (!cg[i.contentGroup]) cg[i.contentGroup] = { clicks: 0, pages: new Set() };
+    cg[i.contentGroup].clicks += i.clicks; cg[i.contentGroup].pages.add(i.path);
+  }
+  makeSortableTable(document.getElementById('hostTable'),
+    [{ label: 'Hostname Group' }, { label: 'Pages', cls: 'num' }, { label: 'Affiliate Clicks', cls: 'num' }],
+    Object.entries(hg).map(([n, d]) => [n, d.pages.size, d.clicks]), 2, 'desc');
+
+  // Sessions by hostname group from allSessions (keyed date|hostnameGroup)
+  const hostSess = {};
+  for (const [key, val] of Object.entries(allSessions)) {
+    const hgName = key.split('|').slice(1).join('|');
+    hostSess[hgName] = (hostSess[hgName] || 0) + val;
+  }
+  const dates = [...new Set(items.map(i => i.date))];
+  const n = dates.length;
+  makeSortableTable(document.getElementById('hostSessionTable'),
+    [{ label: 'Hostname Group' }, { label: 'Sessions', cls: 'num' }, { label: 'Avg Daily Sessions', cls: 'num' }, { label: 'Aff. Clicks', cls: 'num' }, { label: 'Click Rate', cls: 'num' }],
+    Object.entries(hostSess).map(([name, sess]) => {
+      const clicks = hg[name] ? hg[name].clicks : 0;
+      return [name, sess, n ? Math.round(sess / n) : 0, clicks, sess > 0 ? ((clicks / sess) * 100).toFixed(3) + '%' : '-'];
+    }), 1, 'desc');
+
+  makeSortableTable(document.getElementById('contentTable'),
+    [{ label: 'Content Group' }, { label: 'Pages', cls: 'num' }, { label: 'Affiliate Clicks', cls: 'num' }],
+    Object.entries(cg).map(([n, d]) => [`<span class="badge ${badgeClass(n)}">${n}</span>`, d.pages.size, d.clicks]), 2, 'desc');
+}
+
+function renderTrends(items, filterCG, filterHG) {
+  let filtered = items;
+  if (filterCG !== 'all') filtered = filtered.filter(i => i.contentGroup === filterCG);
+  if (filterHG !== 'all') filtered = filtered.filter(i => i.hostnameGroup === filterHG);
+  const daily = {};
+  for (const i of filtered) { if (!daily[i.date]) daily[i.date] = 0; daily[i.date] += i.clicks; }
+  const dates = Object.keys(daily).sort();
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: { labels: dates, datasets: [{ label: 'Affiliate Clicks', data: dates.map(d => daily[d]), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, pointRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#888' } } }, scales: { x: { ticks: { color: '#666', maxTicksLimit: 12 }, grid: { color: '#1e2028' } }, y: { ticks: { color: '#666' }, grid: { color: '#1e2028' } } } }
+  });
+
+  // Sessions by date — aggregate from sessMap filtered by hostnameGroup
+  const sessByDate = {};
+  for (const [key, val] of Object.entries(allSessions)) {
+    const [date, hg] = [key.split('|')[0], key.split('|').slice(1).join('|')];
+    if (filterHG !== 'all' && hg !== filterHG) continue;
+    sessByDate[date] = (sessByDate[date] || 0) + val;
+  }
+  const sessDates = Object.keys(sessByDate).sort();
+
+  if (sessionChart) sessionChart.destroy();
+  sessionChart = new Chart(document.getElementById('sessionChart'), {
+    type: 'line',
+    data: { labels: sessDates, datasets: [{ label: 'Sessions', data: sessDates.map(d => sessByDate[d] || 0), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.3, pointRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#888' } } }, scales: { x: { ticks: { color: '#666', maxTicksLimit: 12 }, grid: { color: '#1e2028' } }, y: { ticks: { color: '#666' }, grid: { color: '#1e2028' } } } }
+  });
+}
+
+function renderPerformers(items) {
+  const byUrl = {};
+  for (const i of items) {
+    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, cg: i.contentGroup, clicks: 0, bestDay: '', bestDayClicks: 0 };
+    byUrl[i.path].clicks += i.clicks;
+    if (i.clicks > byUrl[i.path].bestDayClicks) { byUrl[i.path].bestDayClicks = i.clicks; byUrl[i.path].bestDay = i.date; }
+  }
+  const all = Object.values(byUrl);
+  const headers = [{ label: 'Keyword' }, { label: 'URL' }, { label: 'Host' }, { label: 'Content' }, { label: 'Aff. Clicks', cls: 'num' }, { label: 'Best Day' }, { label: 'Peak', cls: 'num' }];
+  const toRow = u => [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<span class="truncate" title="${u.path}" style="color:#6366f1;font-size:11px;">${u.path.length > 50 ? u.path.slice(0,50)+'...' : u.path}</span>`, u.host, `<span class="badge ${badgeClass(u.cg)}">${u.cg}</span>`, u.clicks, u.bestDay, u.bestDayClicks];
+  makeSortableTable(document.getElementById('topTable'), headers, [...all].sort((a,b) => b.clicks - a.clicks).slice(0,30).map(toRow), 4, 'desc');
+  makeSortableTable(document.getElementById('bottomTable'), headers, [...all].sort((a,b) => a.clicks - b.clicks).slice(0,30).map(toRow), 4, 'asc');
+}
+
+function renderUncategorized(items) {
+  const byUrl = {};
+  for (const i of items.filter(i => i.contentGroup === 'Uncategorized')) {
+    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, clicks: 0 };
+    byUrl[i.path].clicks += i.clicks;
+  }
+  makeSortableTable(document.getElementById('uncatTable'),
+    [{ label: 'Keyword' }, { label: 'URL' }, { label: 'Host' }, { label: 'Aff. Clicks', cls: 'num' }],
+    Object.values(byUrl).sort((a,b) => b.clicks - a.clicks).map(u => [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<span class="truncate" title="${u.path}" style="color:#6366f1;font-size:11px;">${u.path.length > 60 ? u.path.slice(0,60)+'...' : u.path}</span>`, u.host, u.clicks]), 3, 'desc');
+}
+
+function buildHeatmap(items, groupKey, containerId) {
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const groups = [...new Set(items.map(i => i[groupKey]))].sort();
+  const matrix = {};
+  for (const g of groups) { matrix[g] = {}; for (const d of days) matrix[g][d] = 0; }
+  for (const i of items) {
+    const dayIdx = new Date(i.date).getDay();
+    const dayLabel = days[dayIdx === 0 ? 6 : dayIdx - 1];
+    if (matrix[i[groupKey]]) matrix[i[groupKey]][dayLabel] += i.clicks;
+  }
+  let maxVal = 0;
+  for (const g of groups) for (const d of days) maxVal = Math.max(maxVal, matrix[g][d]);
+  let html = `<div class="heatmap" style="grid-template-columns: 160px repeat(${days.length}, 1fr);">`;
+  html += `<div class="heatmap-cell heatmap-header"></div>`;
+  for (const d of days) html += `<div class="heatmap-cell heatmap-header">${d}</div>`;
+  for (const g of groups) {
+    const badge = groupKey === 'contentGroup' ? `<span class="badge ${badgeClass(g)}" style="font-size:9px;">${g}</span>` : `<span style="font-size:11px;color:#c0c0c0;">${g}</span>`;
+    html += `<div class="heatmap-cell heatmap-header" style="text-align:left;">${badge}</div>`;
+    for (const d of days) {
+      const v = matrix[g][d], intensity = maxVal > 0 ? v / maxVal : 0;
+      html += `<div class="heatmap-cell" style="background:rgba(99,102,241,${0.05 + intensity * 0.85});color:${intensity > 0.4 ? '#fff' : '#888'};">${v > 0 ? fmtNum(v) : '-'}</div>`;
+    }
+  }
+  html += '</div>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+// ============ TABS ============
+document.getElementById('mainTabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  if (tab.dataset.tab === 'trends') renderTrends(allItems, document.getElementById('filterContent').value, document.getElementById('filterHost').value);
+});
+
+// ============ DATE RANGE BUTTONS ============
+document.getElementById('dateRangeBar').addEventListener('click', async e => {
+  const btn = e.target.closest('.dr-btn');
+  if (!btn || btn.disabled) return;
+  const days = parseInt(btn.dataset.days);
+  if (days === currentDays) return;
+  currentDays = days;
+  document.querySelectorAll('.dr-btn').forEach(b => { b.classList.remove('active'); b.disabled = true; });
+  btn.classList.add('active');
+  document.getElementById('dashboard').style.display = 'none';
+  const loadEl = document.getElementById('loading');
+  loadEl.style.display = 'block';
+  loadEl.innerHTML = `<div class="spinner"></div><div>Re-fetching ${days} days of data...</div><div id="loadingStatus"></div>`;
+  await loadDashboard(days);
+  document.querySelectorAll('.dr-btn').forEach(b => b.disabled = false);
+});
+
+// ============ MAIN LOAD ============
+async function loadDashboard(days) {
+  try {
+    const raw = await fetchData(days);
+    const { items, dailyHostSess } = processData(raw);
+    allItems = items;
+    allSessions = dailyHostSess;
+
+    if (!allItems.length) {
+      const el = document.getElementById('loading');
+      el.querySelector('.spinner')?.remove();
+      el.innerHTML += '<div style="color:#ef4444; margin-top:12px; font-weight:600;">No affiliate click rows returned.</div>';
+      el.innerHTML += '<div style="color:#888; margin-top:6px; font-size:11px;">Check that the Apps Script has access to property 406717704 and the affiliate_click event exists.</div>';
+      return;
+    }
+
+    const fc = document.getElementById('filterContent'), fh = document.getElementById('filterHost');
+    fc.innerHTML = '<option value="all">All</option>';
+    fh.innerHTML = '<option value="all">All</option>';
+    [...new Set(allItems.map(i => i.contentGroup))].sort().forEach(g => { const o = document.createElement('option'); o.value = g; o.textContent = g; fc.appendChild(o); });
+    [...new Set(allItems.map(i => i.hostnameGroup))].sort().forEach(g => { const o = document.createElement('option'); o.value = g; o.textContent = g; fh.appendChild(o); });
+    fc.onchange = () => renderTrends(allItems, fc.value, fh.value);
+    fh.onchange = () => renderTrends(allItems, fc.value, fh.value);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.querySelectorAll('.dr-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.days) === days));
+
+    renderAlerts(allItems);
+    renderScorecards(allItems);
+    renderOverview(allItems);
+    renderTrends(allItems, 'all', 'all');
+    renderPerformers(allItems);
+    renderUncategorized(allItems);
+    buildHeatmap(allItems, 'contentGroup', 'heatmapContent');
+    buildHeatmap(allItems, 'hostnameGroup', 'heatmapHost');
+
+  } catch (err) {
+    const el = document.getElementById('loading');
+    el.querySelector('.spinner')?.remove();
+    el.innerHTML += `<div style="color:#ef4444; margin-top:12px;">Error: ${err.message}</div><div class="debug">${err.stack || ''}</div>`;
+  }
+}
+
+loadDashboard(currentDays);
+</script>
+</body>
+</html>
