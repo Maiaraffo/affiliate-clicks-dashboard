@@ -81,7 +81,7 @@ canvas { max-height: 300px; }
 .tab.active { color: #6366f1; border-bottom-color: #6366f1; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.truncate { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.truncate { max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 </style>
 </head>
 <body>
@@ -556,13 +556,13 @@ function renderTrends(items, filterCG, filterHG) {
 function renderPerformers(items) {
   const byUrl = {};
   for (const i of items) {
-    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, cg: i.contentGroup, clicks: 0, bestDay: '', bestDayClicks: 0 };
+    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, hostname: i.host, cg: i.contentGroup, clicks: 0, bestDay: '', bestDayClicks: 0 };
     byUrl[i.path].clicks += i.clicks;
     if (i.clicks > byUrl[i.path].bestDayClicks) { byUrl[i.path].bestDayClicks = i.clicks; byUrl[i.path].bestDay = i.date; }
   }
   const all = Object.values(byUrl);
   const headers = [{ label: 'Keyword' }, { label: 'URL' }, { label: 'Host' }, { label: 'Content' }, { label: 'Aff. Clicks', cls: 'num' }, { label: 'Best Day' }, { label: 'Peak', cls: 'num' }];
-  const toRow = u => [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<span class="truncate" title="${u.path}" style="color:#6366f1;font-size:11px;">${u.path.length > 50 ? u.path.slice(0,50)+'...' : u.path}</span>`, u.host, `<span class="badge ${badgeClass(u.cg)}">${u.cg}</span>`, u.clicks, u.bestDay, u.bestDayClicks];
+  const toRow = u => { const fullUrl = 'https://' + u.hostname + u.path; return [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<a href="${fullUrl}" target="_blank" class="truncate" title="${fullUrl}" style="color:#6366f1;font-size:11px;">${fullUrl}</a>`, u.host, `<span class="badge ${badgeClass(u.cg)}">${u.cg}</span>`, u.clicks, u.bestDay, u.bestDayClicks]; };
   makeSortableTable(document.getElementById('topTable'), headers, [...all].sort((a,b) => b.clicks - a.clicks).slice(0,30).map(toRow), 4, 'desc');
   makeSortableTable(document.getElementById('bottomTable'), headers, [...all].sort((a,b) => a.clicks - b.clicks).slice(0,30).map(toRow), 4, 'asc');
 }
@@ -570,12 +570,12 @@ function renderPerformers(items) {
 function renderUncategorized(items) {
   const byUrl = {};
   for (const i of items.filter(i => i.contentGroup === 'Uncategorized')) {
-    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, clicks: 0 };
+    if (!byUrl[i.path]) byUrl[i.path] = { keyword: i.keyword, path: i.path, host: i.hostnameGroup, hostname: i.host, clicks: 0 };
     byUrl[i.path].clicks += i.clicks;
   }
   makeSortableTable(document.getElementById('uncatTable'),
     [{ label: 'Keyword' }, { label: 'URL' }, { label: 'Host' }, { label: 'Aff. Clicks', cls: 'num' }],
-    Object.values(byUrl).sort((a,b) => b.clicks - a.clicks).map(u => [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<span class="truncate" title="${u.path}" style="color:#6366f1;font-size:11px;">${u.path.length > 60 ? u.path.slice(0,60)+'...' : u.path}</span>`, u.host, u.clicks]), 3, 'desc');
+    Object.values(byUrl).sort((a,b) => b.clicks - a.clicks).map(u => { const fullUrl = 'https://' + u.hostname + u.path; return [`<span class="truncate" title="${u.keyword}">${u.keyword}</span>`, `<a href="${fullUrl}" target="_blank" class="truncate" title="${fullUrl}" style="color:#6366f1;font-size:11px;">${fullUrl}</a>`, u.host, u.clicks]; }), 3, 'desc');
 }
 
 function buildHeatmap(items, groupKey, containerId) {
